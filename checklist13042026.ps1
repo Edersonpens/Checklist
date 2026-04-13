@@ -14,16 +14,16 @@ $gen = "Não identificada"
 
 $cpuClean = $cpu -replace '[^a-zA-Z0-9\- ]', ''
 
-# 🔥 1 - NOVO PADRÃO (12th Gen, 11th Gen...)
+# 🔥 NOVO PADRÃO (12th Gen)
 if ($cpuClean -match "([0-9]{1,2})(st|nd|rd|th)\s+Gen") {
     $gen = "$($Matches[1])ª Geração"
 }
 
-# 🔥 2 - Intel tradicional
+# 🔥 Intel (corrigido de verdade)
 if ($gen -eq "Não identificada" -and $cpuClean -match "i[3579]-\s*([0-9]{4,5})") {
     $num = $Matches[1]
 
-    if ([int]$num -ge 10000) {
+    if ($num.Length -ge 4 -and [int]$num.Substring(0,2) -ge 10) {
         $gen = $num.Substring(0,2) + "ª Geração"
     } else {
         $gen = $num.Substring(0,1) + "ª Geração"
