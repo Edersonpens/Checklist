@@ -12,21 +12,27 @@ $threads = $cpuObj.NumberOfLogicalProcessors
 # ================= GERAÇÃO =================
 $gen = "Não identificada"
 
+# limpa o nome
 $cpuClean = $cpu -replace '[^a-zA-Z0-9\- ]', ''
 
+# Intel Core (corrigido para 10ª+)
 if ($cpuClean -match "i[3579]-\s*([0-9]{4,5})") {
     $num = $Matches[1]
-    if ($num.Length -eq 5) {
+
+    # regra correta
+    if ([int]$num.Substring(0,2) -ge 10) {
         $gen = $num.Substring(0,2) + "ª Geração"
     } else {
         $gen = $num.Substring(0,1) + "ª Geração"
     }
 }
 
+# Xeon
 if ($gen -eq "Não identificada" -and $cpuClean -match "Xeon.*v([0-9]+)") {
     $gen = "$($Matches[1])ª Geração"
 }
 
+# Ryzen
 if ($gen -eq "Não identificada" -and $cpuClean -match "Ryzen\s+\d+\s+(\d{4})") {
     $num = $Matches[1]
     $gen = $num.Substring(0,1) + "ª Geração"
