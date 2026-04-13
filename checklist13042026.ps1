@@ -9,38 +9,6 @@ $cpu = $cpuObj.Name
 $cores = $cpuObj.NumberOfCores
 $threads = $cpuObj.NumberOfLogicalProcessors
 
-# ================= GERAÇÃO =================
-$gen = "Não identificada"
-
-$cpuClean = $cpu -replace '[^a-zA-Z0-9\- ]', ''
-
-# 🔥 NOVO PADRÃO (12th Gen)
-if ($cpuClean -match "([0-9]{1,2})(st|nd|rd|th)\s+Gen") {
-    $gen = "$($Matches[1])ª Geração"
-}
-
-# 🔥 Intel (corrigido de verdade)
-if ($gen -eq "Não identificada" -and $cpuClean -match "i[3579]-\s*([0-9]{4,5})") {
-    $num = $Matches[1]
-
-    if ($num.Length -ge 4 -and [int]$num.Substring(0,2) -ge 10) {
-        $gen = $num.Substring(0,2) + "ª Geração"
-    } else {
-        $gen = $num.Substring(0,1) + "ª Geração"
-    }
-}
-
-# Xeon
-if ($gen -eq "Não identificada" -and $cpuClean -match "Xeon.*v([0-9]+)") {
-    $gen = "$($Matches[1])ª Geração"
-}
-
-# Ryzen
-if ($gen -eq "Não identificada" -and $cpuClean -match "Ryzen\s+\d+\s+(\d{4})") {
-    $num = $Matches[1]
-    $gen = $num.Substring(0,1) + "ª Geração"
-}
-
 # ================= RAM =================
 $ram = Get-CimInstance Win32_PhysicalMemory
 $totalRam = "{0:N2} GB" -f ((($ram.Capacity | Measure-Object -Sum).Sum) /1GB)
@@ -127,6 +95,10 @@ Where-Object { $_.IPEnabled -eq $true }
 
 $ip = $ipInfo.IPAddress | Where-Object { $_ -notlike "*:*" } | Select-Object -First 1
 
+# ================= DATA =================
+$dataHora = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
+$dataArquivo = Get-Date -Format "ddMMyyyy"
+
 # ================= PLACA MÃE =================
 $mb = Get-CimInstance Win32_BaseBoard
 $mbInfo = "$($mb.Manufacturer) - $($mb.Product)"
@@ -139,7 +111,7 @@ $output = @"
 Sistema Operacional: $os
 
 Processador: $cpu
-Geração: $gen --> $cores cores / $threads threads
+$cores cores / $threads threads
 
 Memória Total: $totalRam ($ramType $ramSpeed MHz)
 
@@ -165,10 +137,12 @@ NetBIOS Name    $netbios
 
 IP:
 $ip
+
+$dataHora
 "@
 
 # ================= SALVAR =================
 $desktop = [Environment]::GetFolderPath("Desktop")
-$path = "$desktop\$netbios.txt"
+$path = "$desktop\$netbios $dataArquivo.txt"
 
 $output | Out-File $path -Encoding UTF8
