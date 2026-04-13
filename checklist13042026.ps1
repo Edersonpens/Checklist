@@ -12,15 +12,13 @@ $threads = $cpuObj.NumberOfLogicalProcessors
 # ================= GERAÇÃO =================
 $gen = "Não identificada"
 
-# limpa o nome
 $cpuClean = $cpu -replace '[^a-zA-Z0-9\- ]', ''
 
-# Intel Core (corrigido para 10ª+)
+# Intel Core (CORRIGIDO DE VERDADE)
 if ($cpuClean -match "i[3579]-\s*([0-9]{4,5})") {
     $num = $Matches[1]
 
-    # regra correta
-    if ([int]$num.Substring(0,2) -ge 10) {
+    if ([int]$num -ge 10000) {
         $gen = $num.Substring(0,2) + "ª Geração"
     } else {
         $gen = $num.Substring(0,1) + "ª Geração"
@@ -59,13 +57,8 @@ $i = 1
 $physicalDisks = @()
 $reliability = @()
 
-try {
-    $physicalDisks = Get-PhysicalDisk -ErrorAction Stop
-} catch {}
-
-try {
-    $reliability = Get-StorageReliabilityCounter
-} catch {}
+try { $physicalDisks = Get-PhysicalDisk -ErrorAction Stop } catch {}
+try { $reliability = Get-StorageReliabilityCounter } catch {}
 
 if ($physicalDisks.Count -gt 0) {
 
@@ -73,7 +66,6 @@ if ($physicalDisks.Count -gt 0) {
 
         $size = "{0:N0}GB" -f ($disk.Size /1GB)
         $modelo = $disk.FriendlyName
-
         $tipo = "HD"
 
         $rel = $reliability | Where-Object { $_.DeviceId -eq $disk.DeviceId }
@@ -122,11 +114,7 @@ $net = Get-CimInstance Win32_NetworkAdapter |
 Where-Object { $_.NetEnabled -eq $true -and $_.PhysicalAdapter -eq $true } |
 Select-Object -First 1
 
-if ($net -and $net.Speed -ge 1000000000) {
-    $gigabit = "Sim"
-} else {
-    $gigabit = "Não"
-}
+$gigabit = if ($net -and $net.Speed -ge 1000000000) { "Sim" } else { "Não" }
 
 # ================= IP =================
 $ipInfo = Get-CimInstance Win32_NetworkAdapterConfiguration |
