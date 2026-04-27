@@ -4,8 +4,6 @@ $os = (Get-CimInstance Win32_OperatingSystem).Caption
 # ================= CPU =================
 $cpuObj = Get-CimInstance Win32_Processor
 $cpu = $cpuObj.Name
-
-# cores e threads
 $cores = $cpuObj.NumberOfCores
 $threads = $cpuObj.NumberOfLogicalProcessors
 
@@ -21,7 +19,7 @@ switch ($ramTypeCode) {
     default {$ramType = "Desconhecido"}
 }
 
-$ramSpeed = ($ram | Select-Object -First 1).Speed
+$ramSpeed = ($ram | Measure-Object -Property Speed -Average).Average
 
 # ================= DISCO =================
 $diskLines = @()
@@ -46,9 +44,14 @@ if ($physicalDisks.Count -gt 0) {
         if ($rel -and $rel.RotationRate -ne $null) {
             if ($rel.RotationRate -eq 0) { $tipo = "SSD" }
             elseif ($rel.RotationRate -gt 0) { $tipo = "HD" }
-        } else {
-            if ($disk.MediaType -eq "SSD") { $tipo = "SSD" }
-            elseif ($disk.MediaType -eq "HDD") { $tipo = "HD" }
+        }
+
+        if ($disk.BusType -eq "NVMe") {
+            $tipo = "NVMe"
+        } elseif ($disk.MediaType -eq "SSD") {
+            $tipo = "SSD"
+        } elseif ($disk.MediaType -eq "HDD") {
+            $tipo = "HD"
         }
 
         $diskLines += "Disco ${i}: $modelo --> $size ($tipo)"
@@ -69,7 +72,9 @@ if ($physicalDisks.Count -gt 0) {
 
         $modelo = $disk.Model
 
-        if ($disk.Model -match "SSD|NVMe") {
+        if ($disk.Model -match "NVMe") {
+            $tipo = "NVMe"
+        } elseif ($disk.Model -match "SSD") {
             $tipo = "SSD"
         } else {
             $tipo = "HD"
@@ -82,18 +87,30 @@ if ($physicalDisks.Count -gt 0) {
 
 $diskLine = $diskLines -join "`n"
 
-# ================= REDE =================
+# ================= REDE (CAPACIDADE GIGABIT) =================
 $net = Get-CimInstance Win32_NetworkAdapter |
 Where-Object { $_.NetEnabled -eq $true -and $_.PhysicalAdapter -eq $true } |
 Select-Object -First 1
 
-$gigabit = if ($net -and $net.Speed -ge 1000000000) { "Sim" } else { "Não" }
+$gigabit = "Não"
+
+if ($net) {
+    $nome = $net.Name
+
+    if ($nome -match "Gigabit|GbE|Gbe") {
+        $gigabit = "Sim"
+    }
+}
 
 # ================= IP =================
 $ipInfo = Get-CimInstance Win32_NetworkAdapterConfiguration |
 Where-Object { $_.IPEnabled -eq $true }
 
-$ip = $ipInfo.IPAddress | Where-Object { $_ -notlike "*:*" } | Select-Object -First 1
+$ip = $ipInfo |
+Where-Object { $_.Description -notmatch "Virtual|VPN|Hyper-V" } |
+Select-Object -ExpandProperty IPAddress |
+Where-Object { $_ -notlike "*:*" } |
+Select-Object -First 1
 
 # ================= DATA =================
 $dataHora = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
@@ -118,6 +135,8 @@ Memória Total: $totalRam ($ramType $ramSpeed MHz)
 Armazenamento:
 $diskLine
 
+Rede:
+$($net.Name)
 Gigabit - $gigabit
 
 Fonte:
@@ -130,10 +149,7 @@ Teclado:
 Placa Mãe:
 $mbInfo
 
-Rede:
-$($net.Name)
-
-NetBIOS Name    $netbios
+NetBIOS Name: $netbios
 
 IP:
 $ip
