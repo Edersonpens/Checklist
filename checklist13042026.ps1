@@ -97,7 +97,7 @@ $gigabit = "Não"
 if ($net) {
     $nome = $net.Name
 
-    if ($nome -match "Gigabit|GbE|Gbe") {
+    if ($nome -match "Gigabit|GbE|Gbe|10/100/1000|1000BASE-T|Gigabit Network|Gigabit Adapter") {
         $gigabit = "Sim"
     }
 }
