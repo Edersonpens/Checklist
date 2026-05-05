@@ -114,7 +114,7 @@ Select-Object -First 1
 
 # ================= DATA =================
 $dataHora = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
-$dataArquivo = Get-Date -Format "ddMMyyyy"
+$dataArquivo = Get-Date -Format "ddMMyyyy_HHmmss"  # <-- CORREÇÃO AQUI
 
 # ================= PLACA MÃE =================
 $mb = Get-CimInstance Win32_BaseBoard
