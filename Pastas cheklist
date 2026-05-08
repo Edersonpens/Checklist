@@ -60,6 +60,15 @@ $pastaPrincipal = Join-Path $desktop $nomePastaPrincipal
 New-Item -Path $pastaPrincipal -ItemType Directory -Force | Out-Null
 
 # =========================
+# PASTAS FIXAS
+# =========================
+$pastaServidor = Join-Path $pastaPrincipal "Servidor"
+$pastaInternet = Join-Path $pastaPrincipal "Internet e Switch"
+
+New-Item -Path $pastaServidor -ItemType Directory -Force | Out-Null
+New-Item -Path $pastaInternet -ItemType Directory -Force | Out-Null
+
+# =========================
 # NOME DO LOG
 # =========================
 $dataHoraLog = Get-Date -Format "dd-MM-yy_HH-mm-ss"
@@ -81,6 +90,9 @@ Escrever-Log "Pasta principal: $nomePastaPrincipal"
 Escrever-Log "Local: $pastaPrincipal"
 Escrever-Log "Log: $nomeLog"
 Escrever-Log "=========================================="
+
+Escrever-Log "Pasta fixa criada: Servidor"
+Escrever-Log "Pasta fixa criada: Internet e Switch"
 
 Write-Host ""
 
@@ -154,6 +166,36 @@ for ($i = 1; $i -le $qtdLojas; $i++) {
 
         Escrever-Log "   -> Caixa criado: $nomeCaixa"
         Escrever-Log "      Caminho: $pastaCaixa"
+    }
+
+    # =========================
+    # QUANTIDADE RETAGUARDAS
+    # =========================
+    do {
+        $qtdRetaguardas = Read-Host "Quantas retaguardas existem em $nomeLoja"
+    } while (-not ($qtdRetaguardas -match '^\d+$'))
+
+    $qtdRetaguardas = [int]$qtdRetaguardas
+
+    Escrever-Log "Quantidade de retaguardas em $nomeLoja : $qtdRetaguardas"
+
+    # =====================================================
+    # LOOP RETAGUARDAS
+    # =====================================================
+    for ($r = 1; $r -le $qtdRetaguardas; $r++) {
+
+        $numeroRetaguarda = "{0:D2}" -f $r
+
+        $nomeRetaguarda = "Retaguarda $numeroRetaguarda"
+
+        # Caminho retaguarda
+        $pastaRetaguarda = Join-Path $pastaLoja $nomeRetaguarda
+
+        # Criar pasta retaguarda
+        New-Item -Path $pastaRetaguarda -ItemType Directory -Force | Out-Null
+
+        Escrever-Log "   -> Retaguarda criada: $nomeRetaguarda"
+        Escrever-Log "      Caminho: $pastaRetaguarda"
     }
 
     Write-Host ""
