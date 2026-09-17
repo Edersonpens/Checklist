@@ -1,0 +1,586 @@
+param(
+    [string]$SpeccyFile = $null,
+    [switch]$SkipSpeccy
+)
+
+# ================= SISTEMA =================
+$os = (Get-CimInstance Win32_OperatingSystem).Caption
+
+# ================= CPU =================
+$cpuObj  = Get-CimInstance Win32_Processor
+$cpu     = $cpuObj.Name
+$cores   = $cpuObj.NumberOfCores
+$threads = $cpuObj.NumberOfLogicalProcessors
+
+# ================= RAM =================
+$ram = Get-CimInstance Win32_PhysicalMemory
+$totalRam = "{0:N2} GB" -f ((($ram.Capacity | Measure-Object -Sum).Sum) /1GB)
+
+$ramTypeCode = ($ram | Select-Object -First 1).SMBIOSMemoryType
+switch ($ramTypeCode) {
+    24 {$ramType = "DDR3"}
+    26 {$ramType = "DDR4"}
+    34 {$ramType = "DDR5"}
+    default {$ramType = "Desconhecido"}
+}
+
+$ramSpeed = ($ram | Measure-Object -Property Speed -Average).Average
+
+# ============================================================
+#                 HELPERS GERAIS
+# ============================================================
+function Normalize-Str($s) {
+    if (-not $s) { return "" }
+    return ($s -replace "[^a-zA-Z0-9]", "").ToLower()
+}
+
+function Resolve-SpeccyPath {
+    param([string]$InputPath)
+
+    if ([string]::IsNullOrWhiteSpace($InputPath)) { return $null }
+    if (-not (Test-Path $InputPath))              { return $null }
+
+    $item = Get-Item -LiteralPath $InputPath -ErrorAction SilentlyContinue
+    if (-not $item) { return $null }
+
+    if ($item.PSIsContainer) {
+        $found = Get-ChildItem -LiteralPath $item.FullName -Filter "*.txt" -File -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending |
+                 Select-Object -First 1
+        if ($found) { return $found.FullName }
+        return $null
+    }
+
+    if ($item.Extension -and $item.Extension.ToLower() -ne ".txt") {
+        Write-Host "Aviso: o arquivo não é .txt. Vou tentar ler mesmo assim." -ForegroundColor Yellow
+    }
+    return $item.FullName
+}
+
+function Find-SpeccyFile {
+    $dirs = @(
+        $PSScriptRoot,
+        "$env:USERPROFILE\Desktop",
+        "$env:USERPROFILE\Downloads",
+        "$env:USERPROFILE\Documents",
+        "C:\Sistema"
+    ) | Where-Object { $_ -and (Test-Path $_) }
+
+    foreach ($d in $dirs) {
+        $found = Get-ChildItem -Path $d -Filter "*.txt" -File -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending |
+                 Select-Object -First 1
+        if ($found) { return $found.FullName }
+    }
+    return $null
+}
+
+# ============================================================
+#         ESTRUTURA QUE GUARDA OS DADOS DO SPECCY
+# ============================================================
+$speccy = [ordered]@{
+    Available     = $false
+    Path          = $null
+    IsSpeccyLike  = $null
+    MachineName   = $null
+    MachineMatch  = $null
+    CpuTemp       = $null
+    CpuCodename   = $null
+    CpuPackage    = $null
+    RamType       = $null
+    RamFreq       = $null
+    RamChannels   = $null
+    RamTimings    = $null
+    Chipset       = $null
+    Bios          = $null
+    Disks         = @()
+}
+
+# ============================================================
+#      PERGUNTA AO USUÁRIO SE TEM O TXT DO SPECCY
+# ============================================================
+$usarSpeccy = $false
+
+if ($SkipSpeccy) {
+    $usarSpeccy = $false
+} elseif ($SpeccyFile) {
+    $usarSpeccy = $true
+} else {
+    Write-Host ""
+    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Host " Você tem o arquivo TXT do Speccy desta máquina?" -ForegroundColor Cyan
+    Write-Host " (S = usar como complemento | N = só WMI)"       -ForegroundColor DarkGray
+    Write-Host "================================================" -ForegroundColor Cyan
+
+    do {
+        $resp = (Read-Host "Responder S/N").Trim().ToUpper()
+    } while ($resp -ne "S" -and $resp -ne "N" -and $resp -ne "SIM" -and $resp -ne "NAO" -and $resp -ne "NÃO")
+
+    if ($resp -eq "S" -or $resp -eq "SIM") { $usarSpeccy = $true }
+    else                                   { $usarSpeccy = $false }
+}
+
+# ============================================================
+#              LOCALIZA O ARQUIVO .TXT
+# ============================================================
+$speccyPath = $null
+
+if ($usarSpeccy) {
+    if ($SpeccyFile) {
+        $speccyPath = Resolve-SpeccyPath $SpeccyFile
+        if (-not $speccyPath) {
+            Write-Host "Caminho inválido em -SpeccyFile: $SpeccyFile" -ForegroundColor Red
+        }
+    }
+
+    if (-not $speccyPath) {
+        $tentativas = 0
+        while (-not $speccyPath -and $tentativas -lt 3) {
+            $tentativas++
+
+            Write-Host ""
+            Write-Host "================================================" -ForegroundColor Cyan
+            Write-Host " Informe o caminho do arquivo TXT do Speccy"     -ForegroundColor Cyan
+            Write-Host " (Pode ser o arquivo .txt ou a pasta que o contém)" -ForegroundColor DarkGray
+            Write-Host " (Enter em branco = procurar automaticamente)"     -ForegroundColor DarkGray
+            Write-Host "================================================" -ForegroundColor Cyan
+
+            $entrada = Read-Host "Caminho do Speccy"
+
+            if ([string]::IsNullOrWhiteSpace($entrada)) {
+                Write-Host "Procurando arquivos .txt em pastas comuns..." -ForegroundColor Yellow
+                $speccyPath = Find-SpeccyFile
+
+                if ($speccyPath) {
+                    Write-Host "Encontrado: $speccyPath" -ForegroundColor Green
+                } else {
+                    Write-Host "Nenhum .txt encontrado. Seguindo SEM o Speccy." -ForegroundColor Yellow
+                    break
+                }
+            } else {
+                $entrada = $entrada.Trim('"').Trim("'").Trim()
+                $resolvido = Resolve-SpeccyPath $entrada
+
+                if ($resolvido) {
+                    $speccyPath = $resolvido
+                    Write-Host "Arquivo confirmado: $speccyPath" -ForegroundColor Green
+                } else {
+                    if (Test-Path $entrada) {
+                        $it = Get-Item -LiteralPath $entrada -ErrorAction SilentlyContinue
+                        if ($it -and $it.PSIsContainer) {
+                            Write-Host "A pasta '$entrada' não contém nenhum arquivo .txt." -ForegroundColor Red
+                        } else {
+                            Write-Host "Não foi possível usar '$entrada' como arquivo." -ForegroundColor Red
+                        }
+                    } else {
+                        Write-Host "Caminho não encontrado: $entrada" -ForegroundColor Red
+                    }
+                }
+            }
+        }
+    }
+}
+
+# ============================================================
+#                LEITURA E PARSE DO ARQUIVO
+#     (extrai APENAS os campos que usamos no relatório)
+# ============================================================
+if ($speccyPath) {
+    $text = $null
+    try {
+        $text = Get-Content -LiteralPath $speccyPath -Raw -Encoding UTF8
+    } catch {
+        Write-Host "Falha ao ler '$speccyPath': $($_.Exception.Message)" -ForegroundColor Red
+        $speccyPath = $null
+    }
+
+    if ($text) {
+        try {
+            $speccy.Available = $true
+            $speccy.Path      = $speccyPath
+
+            $speccy.IsSpeccyLike = (
+                $text -match "Speccy" -or
+                $text -match "NetBIOS Name" -or
+                $text -match "(?m)^Operating System"
+            )
+
+            # --- NetBIOS Name (para validar a máquina) ---
+            if ($text -match "NetBIOS Name\s+(\S+)") {
+                $speccy.MachineName  = $matches[1].Trim()
+                $speccy.MachineMatch = ($speccy.MachineName -ieq $env:COMPUTERNAME)
+            }
+
+            # --- CPU: temperatura, codename, package ---
+            if ($text -match "Average Temperature\s+(\d+)\s*°C") {
+                $speccy.CpuTemp = "$($matches[1]) °C"
+            }
+            if ($text -match "(?ms)^CPU\s*\r?\n.*?^\t{2}Code Name\s+(.+)") {
+                $speccy.CpuCodename = $matches[1].Trim()
+            }
+            if ($text -match "(?ms)^CPU\s*\r?\n.*?^\t{2}Package\s+(.+)") {
+                $speccy.CpuPackage = $matches[1].Trim()
+            }
+
+            # --- RAM: tipo, frequência real, canais, timings ---
+            if ($text -match "(?ms)^\t+Memory\s*\r?\n(.*?)(?=^\t+Physical Memory)") {
+                $mem = $matches[1]
+
+                if ($mem -match "Type\s+(DDR\d+)")    { $speccy.RamType = $matches[1] }
+                if ($mem -match "Channels #\s+(\w+)") { $speccy.RamChannels = $matches[1] }
+
+                if ($mem -match "DRAM Frequency\s+([\d.,]+)\s*MHz") {
+                    $base = [double]($matches[1] -replace ",", ".")
+                    $speccy.RamFreq = "{0:N0} MHz" -f ($base * 2)
+                }
+
+                $cl   = if ($mem -match "CAS# Latency \(CL\)\s+(\d+)")          { $matches[1] } else { $null }
+                $trcd = if ($mem -match "RAS# to CAS# Delay \(tRCD\)\s+(\d+)") { $matches[1] } else { $null }
+                $trp  = if ($mem -match "RAS# Precharge \(tRP\)\s+(\d+)")      { $matches[1] } else { $null }
+                $tras = if ($mem -match "Cycle Time \(tRAS\)\s+(\d+)")         { $matches[1] } else { $null }
+
+                if ($cl -and $trcd -and $trp -and $tras) {
+                    $speccy.RamTimings = "$cl-$trcd-$trp-$tras"
+                }
+            }
+
+            # --- Chipset e BIOS ---
+            if ($text -match "Chipset Model\s+(.+)") { $speccy.Chipset = $matches[1].Trim() }
+
+            if ($text -match "(?ms)BIOS\s*\r?\n\s*Brand\s+(.+?)\r?\n\s*Version\s+(.+?)\r?\n\s*Date\s+(.+)") {
+                $speccy.Bios = "$($matches[1].Trim()) $($matches[2].Trim())"
+            }
+
+            # --- Discos: temperatura e saúde (SOMENTE Hard drives) ---
+            if ($text -match "(?ms)^\t+Hard drives\s*\r?\n(.*?)(?=^\t+Flash drives|^\t+Optical Drives|\z)") {
+                $hd = $matches[1]
+                $blocks = [regex]::Matches(
+                    $hd,
+                    "(?ms)^\t{3,5}([^\t\r\n][^\r\n]*?)\s*\r?\n(.*?)(?=^\t{3,5}[^\t\r\n]|\z)"
+                )
+                foreach ($b in $blocks) {
+                    $body = $b.Groups[2].Value
+                    if ($body -notmatch "Capacity|Interface") { continue }
+
+                    $speccy.Disks += @{
+                        Name       = $b.Groups[1].Value.Trim()
+                        Serial     = if ($body -match "Serial Number\s+(\S+)")       { $matches[1].Trim() } else { $null }
+                        Interface  = if ($body -match "Interface\s+(.+)")            { $matches[1].Trim() } else { $null }
+                        Temp       = if ($body -match "Temperature\s+(\d+)\s*°C")    { "$($matches[1]) °C" } else { $null }
+                        Health     = if ($body -match "Status\s+(Good|Caution|Bad)") { $matches[1] }         else { $null }
+                        CapacityGB = if ($body -match "Capacity\s+(\d+)\s*GB")       { [int]$matches[1] }    else { $null }
+                    }
+                }
+            }
+        } catch {
+            Write-Host "Erro ao processar conteúdo do arquivo: $($_.Exception.Message)" -ForegroundColor Red
+            $speccy.Available = $false
+            $speccy.Disks     = @()
+        }
+    }
+}
+
+# ============================================================
+#           MATCH DE DISCO WMI x SPECCY
+# ============================================================
+function Find-SpeccyDisk {
+    param($WmiSerial, $WmiModel, $WmiSizeGB)
+
+    if (-not $speccy.Available -or $speccy.Disks.Count -eq 0) { return $null }
+
+    if ($WmiSerial) {
+        $ws = Normalize-Str $WmiSerial
+        foreach ($sd in $speccy.Disks) {
+            if ($sd.Serial -and (Normalize-Str $sd.Serial) -eq $ws) { return $sd }
+        }
+    }
+
+    $wn = Normalize-Str $WmiModel
+    $best = $null; $bestScore = 0
+    foreach ($sd in $speccy.Disks) {
+        $score = 0
+        $sn = Normalize-Str $sd.Name
+        if ($wn -and $sn -and ($wn -like "*$sn*" -or $sn -like "*$wn*")) { $score += 2 }
+        if ($sd.CapacityGB -and $WmiSizeGB) {
+            $diff = [math]::Abs($sd.CapacityGB - $WmiSizeGB) / [math]::Max($sd.CapacityGB, $WmiSizeGB)
+            if ($diff -le 0.1) { $score += 3 }
+        }
+        if ($score -gt $bestScore) { $bestScore = $score; $best = $sd }
+    }
+    if ($bestScore -ge 2) { return $best }
+    return $null
+}
+
+# ============================================================
+#            CLASSIFICAÇÃO DO TIPO DE DISCO
+# ============================================================
+function Get-DiskType {
+    param(
+        [string]$Modelo,
+        [bool]$IsSSD,
+        [bool]$IsHDD,
+        [string]$BusType,
+        $SpeccyDisk
+    )
+
+    if ($SpeccyDisk) {
+        $iface   = if ($SpeccyDisk.Interface) { $SpeccyDisk.Interface.ToString() } else { "" }
+        $nomeSpc = if ($SpeccyDisk.Name)      { $SpeccyDisk.Name.ToString() }      else { "" }
+
+        if ($iface -match "NVMe|PCI-?Express|PCIe") { return "NVMe" }
+
+        if ($iface -match "SATA") {
+            if ($nomeSpc -match "M\.2|M2\b|2280") { return "SSD M.2" }
+            if ($Modelo  -match "M\.2|M2\b|2280") { return "SSD M.2" }
+            if ($IsSSD -or $nomeSpc -match "SSD") { return "SSD" }
+            return "HD"
+        }
+
+        if ($iface -match "USB") { return $null }
+    }
+
+    if ($BusType -eq "NVMe") { return "NVMe" }
+
+    if ($IsSSD) {
+        if ($Modelo -match "M\.2|M2\b|2280") { return "SSD M.2" }
+        return "SSD"
+    }
+
+    if ($IsHDD) { return "HD" }
+
+    if ($Modelo -match "NVMe")           { return "NVMe" }
+    if ($Modelo -match "M\.2|M2\b|2280") { return "SSD M.2" }
+    if ($Modelo -match "SSD")            { return "SSD" }
+    return "HD"
+}
+
+# ================= DISCO =================
+$diskLines = @()
+$i = 1
+
+$physicalDisks = @()
+$reliability   = @()
+
+try { $physicalDisks = Get-PhysicalDisk -ErrorAction Stop } catch {}
+try { $reliability   = Get-StorageReliabilityCounter } catch {}
+
+if ($physicalDisks.Count -gt 0) {
+
+    foreach ($disk in $physicalDisks) {
+
+        if ($disk.BusType -eq "USB") { continue }
+
+        $sizeGB = [math]::Round($disk.Size / 1GB)
+        $size   = "{0:N0}GB" -f $sizeGB
+        $modelo = $disk.FriendlyName
+
+        $isSSD = $false
+        $isHDD = $false
+        $rel = $reliability | Where-Object { $_.DeviceId -eq $disk.DeviceId }
+        if ($rel -and $rel.RotationRate -ne $null) {
+            if ($rel.RotationRate -eq 0) { $isSSD = $true }
+            elseif ($rel.RotationRate -gt 0) { $isHDD = $true }
+        }
+        if     ($disk.MediaType -eq "SSD") { $isSSD = $true }
+        elseif ($disk.MediaType -eq "HDD") { $isHDD = $true }
+
+        $sd = Find-SpeccyDisk $disk.SerialNumber $modelo $sizeGB
+
+        $tipo = Get-DiskType -Modelo $modelo -IsSSD $isSSD -IsHDD $isHDD `
+                             -BusType $disk.BusType -SpeccyDisk $sd
+
+        if (-not $tipo) { continue }
+
+        $extra = ""
+        if ($sd) {
+            $bits = @()
+            if ($sd.Temp)   { $bits += "Temp: $($sd.Temp)" }
+            if ($sd.Health) { $bits += "Saúde: $($sd.Health)" }
+            if ($bits.Count -gt 0) { $extra = " [" + ($bits -join ", ") + "]" }
+        }
+
+        $diskLines += "Disco ${i}: $modelo --> $size ($tipo)$extra"
+        $i++
+    }
+
+} else {
+
+    $disks = Get-CimInstance Win32_DiskDrive
+
+    foreach ($disk in $disks) {
+
+        if ($disk.InterfaceType -eq "USB") { continue }
+
+        $sizeGB = if ($disk.Size) { [math]::Round($disk.Size / 1GB) } else { 0 }
+        $size   = if ($disk.Size) { "{0:N0}GB" -f $sizeGB } else { "Desconhecido" }
+        $modelo = $disk.Model
+
+        $isSSD = $false
+        $isHDD = $false
+        if ($disk.Model -match "SSD")               { $isSSD = $true }
+        if ($disk.Model -match "\bHDD\b|Hard Disk") { $isHDD = $true }
+
+        $sd = Find-SpeccyDisk $disk.SerialNumber $modelo $sizeGB
+
+        $tipo = Get-DiskType -Modelo $modelo -IsSSD $isSSD -IsHDD $isHDD `
+                             -BusType $disk.InterfaceType -SpeccyDisk $sd
+
+        if (-not $tipo) { continue }
+
+        $extra = ""
+        if ($sd) {
+            $bits = @()
+            if ($sd.Temp)   { $bits += "Temp: $($sd.Temp)" }
+            if ($sd.Health) { $bits += "Saúde: $($sd.Health)" }
+            if ($bits.Count -gt 0) { $extra = " [" + ($bits -join ", ") + "]" }
+        }
+
+        $diskLines += "Disco ${i}: $modelo --> $size ($tipo)$extra"
+        $i++
+    }
+}
+
+if ($diskLines.Count -eq 0) {
+    $diskLine = "(nenhum disco interno detectado)"
+} else {
+    $diskLine = $diskLines -join "`n"
+}
+
+# ================= REDE =================
+$networks = Get-CimInstance Win32_NetworkAdapter |
+Where-Object {
+    $_.PhysicalAdapter -eq $true -and
+    $_.Name -notmatch "Virtual|VPN|Hyper-V|Bluetooth"
+}
+
+$redeLines = @()
+$i = 1
+
+foreach ($net in $networks) {
+
+    $tipoRede = "Cabo"
+    if ($net.Name -match "Wireless|Wi-Fi|WiFi|802.11") { $tipoRede = "Wi-Fi" }
+
+    $status = "Desconectado"
+    if ($net.NetEnabled -eq $true) { $status = "Conectado" }
+
+    $gigabit = "Não"
+    if ($net.Speed -ge 1000000000) { $gigabit = "Sim" }
+
+    $redeLines += @"
+Rede ${i}:
+$($net.Name)
+Tipo: $tipoRede
+Status: $status
+Gigabit: $gigabit
+"@
+    $i++
+}
+
+$redeInfo = $redeLines -join "`n"
+
+# ================= IP =================
+$ipInfo = Get-CimInstance Win32_NetworkAdapterConfiguration |
+Where-Object { $_.IPEnabled -eq $true }
+
+$ip = $ipInfo |
+Where-Object { $_.Description -notmatch "Virtual|VPN|Hyper-V" } |
+Select-Object -ExpandProperty IPAddress |
+Where-Object { $_ -notlike "*:*" } |
+Select-Object -First 1
+
+# ================= DATA =================
+$dataHora    = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
+$dataArquivo = Get-Date -Format "ddMMyyyy_HHmmss"
+
+# ================= PLACA MÃE =================
+$mb = Get-CimInstance Win32_BaseBoard
+$mbInfo = "$($mb.Manufacturer) - $($mb.Product)"
+
+$mbExtras = @()
+if ($speccy.Available -and $speccy.MachineMatch -ne $false) {
+    if ($speccy.Chipset) { $mbExtras += "Chipset: $($speccy.Chipset)" }
+    if ($speccy.Bios)    { $mbExtras += "BIOS: $($speccy.Bios)" }
+}
+if ($mbExtras.Count -gt 0) {
+    $mbInfo += "`n(" + ($mbExtras -join " | ") + ")"
+}
+
+# ================= NOME =================
+$netbios = $env:COMPUTERNAME
+
+# ================= MONTAGEM DA SAÍDA =================
+# CPU
+$cpuLinha = "$cpu`n$cores cores / $threads threads"
+$cpuExtras = @()
+if ($speccy.Available -and $speccy.MachineMatch -ne $false) {
+    if ($speccy.CpuCodename) { $cpuExtras += $speccy.CpuCodename }
+    if ($speccy.CpuPackage)  { $cpuExtras += $speccy.CpuPackage }
+    if ($speccy.CpuTemp)     { $cpuExtras += "Temp: $($speccy.CpuTemp)" }
+}
+if ($cpuExtras.Count -gt 0) { $cpuLinha += "`n(" + ($cpuExtras -join " | ") + ")" }
+
+# RAM
+$ramTipoFinal = if ($speccy.Available -and $speccy.MachineMatch -ne $false -and $speccy.RamType) { $speccy.RamType } else { $ramType }
+$ramFreqFinal = if ($speccy.Available -and $speccy.MachineMatch -ne $false -and $speccy.RamFreq) { $speccy.RamFreq } else { "$ramSpeed MHz" }
+
+$ramExtras = @()
+if ($speccy.Available -and $speccy.MachineMatch -ne $false) {
+    if ($speccy.RamChannels) { $ramExtras += $speccy.RamChannels }
+    if ($speccy.RamTimings)  { $ramExtras += $speccy.RamTimings }
+}
+$ramExtraStr = if ($ramExtras.Count -gt 0) { " - " + ($ramExtras -join ", ") } else { "" }
+
+$ramLinha = "$totalRam ($ramTipoFinal $ramFreqFinal$ramExtraStr)"
+
+# ================= FRASE DE FONTE =================
+$speccyFoiUsado = ($speccy.Available -and $speccy.MachineMatch -ne $false)
+
+if ($speccyFoiUsado) {
+    $fraseFonte = "(Informações complementadas pelo Speccy)"
+} else {
+    $fraseFonte = "(Relatório gerado apenas com dados do WMI)"
+}
+
+# ================= SAÍDA =================
+$output = @"
+Sistema Operacional: $os
+
+Processador: $cpuLinha
+
+Memória Total: $ramLinha
+
+Armazenamento:
+$diskLine
+
+Rede:
+$redeInfo
+
+Fonte:
+Balança:
+Impressora:
+Leitor código de barras:
+PinPad:
+Teclado:
+
+Placa Mãe:
+$mbInfo
+
+NetBIOS Name: $netbios
+
+IP:
+$ip
+
+$dataHora
+
+$fraseFonte
+"@
+
+# ================= SALVAR =================
+$desktop = [Environment]::GetFolderPath("Desktop")
+$path = "$desktop\$netbios $dataArquivo.txt"
+
+$output | Out-File $path -Encoding UTF8
+
+Write-Host ""
+Write-Host "Relatório salvo em: $path" -ForegroundColor Green
