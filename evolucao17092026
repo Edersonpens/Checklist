@@ -654,13 +654,9 @@ $dataArquivo = Get-Date -Format "ddMMyyyy_HHmmss"
 $mb = Get-CimInstance Win32_BaseBoard
 $mbInfo = "$($mb.Manufacturer) - $($mb.Product)"
 
-$mbExtras = @()
-if ($speccy.Available -and $speccy.MachineMatch -ne $false) {
-    if ($speccy.Chipset) { $mbExtras += "Chipset: $($speccy.Chipset)" }
-    if ($speccy.Bios)    { $mbExtras += "BIOS: $($speccy.Bios)" }
-}
-if ($mbExtras.Count -gt 0) {
-    $mbInfo += "`n(" + ($mbExtras -join " | ") + ")"
+# Apenas o Chipset (sem BIOS)
+if ($speccy.Available -and $speccy.MachineMatch -ne $false -and $speccy.Chipset) {
+    $mbInfo += "`n(Chipset: $($speccy.Chipset))"
 }
 
 # ================= NOME =================
@@ -677,18 +673,11 @@ if ($speccy.Available -and $speccy.MachineMatch -ne $false) {
 }
 if ($cpuExtras.Count -gt 0) { $cpuLinha += "`n(" + ($cpuExtras -join " | ") + ")" }
 
-# RAM
+# RAM — apenas tipo e frequência (sem canais nem timings)
 $ramTipoFinal = if ($speccy.Available -and $speccy.MachineMatch -ne $false -and $speccy.RamType) { $speccy.RamType } else { $ramType }
 $ramFreqFinal = if ($speccy.Available -and $speccy.MachineMatch -ne $false -and $speccy.RamFreq) { $speccy.RamFreq } else { "$ramSpeed MHz" }
 
-$ramExtras = @()
-if ($speccy.Available -and $speccy.MachineMatch -ne $false) {
-    if ($speccy.RamChannels) { $ramExtras += $speccy.RamChannels }
-    if ($speccy.RamTimings)  { $ramExtras += $speccy.RamTimings }
-}
-$ramExtraStr = if ($ramExtras.Count -gt 0) { " - " + ($ramExtras -join ", ") } else { "" }
-
-$ramLinha = "$totalRam ($ramTipoFinal $ramFreqFinal$ramExtraStr)"
+$ramLinha = "$totalRam ($ramTipoFinal $ramFreqFinal)"
 
 # ================= FRASE DE FONTE =================
 $speccyFoiUsado = ($speccy.Available -and $speccy.MachineMatch -ne $false)
