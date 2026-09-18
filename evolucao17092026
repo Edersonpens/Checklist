@@ -27,6 +27,148 @@ switch ($ramTypeCode) {
 $ramSpeed = ($ram | Measure-Object -Property Speed -Average).Average
 
 # ============================================================
+#       MENU: TIPO DE MÁQUINA + PERIFÉRICOS
+# ============================================================
+$perifericos = [ordered]@{
+    Fonte      = ""
+    Balanca    = ""
+    Impressora = ""
+    Leitor     = ""
+    PinPad     = ""
+    Teclado    = ""
+}
+
+function Show-Menu {
+    param(
+        [string]$Titulo,
+        [string[]]$Opcoes
+    )
+    Write-Host ""
+    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Host " $Titulo" -ForegroundColor Cyan
+    Write-Host "================================================" -ForegroundColor Cyan
+    for ($i = 0; $i -lt $Opcoes.Count; $i++) {
+        Write-Host ("  [{0}] {1}" -f ($i + 1), $Opcoes[$i])
+    }
+    Write-Host "================================================" -ForegroundColor Cyan
+}
+
+function Read-OpcaoMenu {
+    param(
+        [string[]]$Opcoes,
+        [string]$PromptExtra = "Opção"
+    )
+    $max = $Opcoes.Count
+    do {
+        $resp = Read-Host $PromptExtra
+        $num = 0
+        $valido = [int]::TryParse($resp, [ref]$num) -and $num -ge 1 -and $num -le $max
+    } while (-not $valido)
+    return ($num - 1)
+}
+
+# ---------- TIPO DE MÁQUINA (mesmo estilo visual) ----------
+Write-Host ""
+Write-Host "================================================" -ForegroundColor Yellow
+Write-Host " Qual o tipo desta máquina?" -ForegroundColor Yellow
+Write-Host " [1] Caixa  |  [2] Retaguarda" -ForegroundColor DarkGray
+Write-Host "================================================" -ForegroundColor Yellow
+
+do {
+    $tipoMaq = Read-Host "Escolha o tipo"
+} while ($tipoMaq -ne "1" -and $tipoMaq -ne "2")
+
+$isCaixa = ($tipoMaq -eq "1")
+
+if ($isCaixa) {
+
+    # ---------- FONTE ----------
+    Write-Host ""
+    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Host " FONTE" -ForegroundColor Cyan
+    Write-Host " (digite apenas o número — será completado com W)" -ForegroundColor DarkGray
+    Write-Host "================================================" -ForegroundColor Cyan
+    $fonteVal = Read-Host "Fonte"
+    if ([string]::IsNullOrWhiteSpace($fonteVal)) {
+        $perifericos.Fonte = ""
+    } else {
+        $perifericos.Fonte = $fonteVal.Trim() + "W"
+    }
+
+    # ---------- BALANÇA ----------
+    $opcBalanca = @("Prix 8217", "Elgin DP30CK", "Outros")
+    Show-Menu -Titulo "BALANÇA" -Opcoes $opcBalanca
+    $idx = Read-OpcaoMenu -Opcoes $opcBalanca
+    if ($idx -eq ($opcBalanca.Count - 1)) {
+        $perifericos.Balanca = Read-Host "Digite o nome/modelo da balança"
+    } else {
+        $perifericos.Balanca = $opcBalanca[$idx]
+    }
+
+    # ---------- IMPRESSORA ----------
+    $opcImpressora = @(
+        "Epson TM-T20",
+        "Epson TM-T20X",
+        "Epson TM-T20X-II",
+        "Epson TM-T88V",
+        "Elgin I9",
+        "Elgin I9 FULL",
+        "Elgin I8",
+        "Elgin I7",
+        "Elgin MP-4200",
+        "Elgin MP-4200 HS",
+        "Bematech MP-4200",
+        "Bematech MP-4200 HS",
+        "Bematech MP-4200 TH",
+        "Bematech MP-2800 TH",
+        "Daruma DR800",
+        "Outros"
+    )
+    Show-Menu -Titulo "IMPRESSORA" -Opcoes $opcImpressora
+    $idx = Read-OpcaoMenu -Opcoes $opcImpressora
+    if ($idx -eq ($opcImpressora.Count - 1)) {
+        $perifericos.Impressora = Read-Host "Digite o nome/modelo da impressora"
+    } else {
+        $perifericos.Impressora = $opcImpressora[$idx]
+    }
+
+    # ---------- LEITOR CÓDIGO DE BARRAS ----------
+    $opcLeitor = @("Elgin", "Honeywell", "Datalogic Magellan", "C3Tech", "Tanca", "Outros")
+    Show-Menu -Titulo "LEITOR CÓDIGO DE BARRAS" -Opcoes $opcLeitor
+    $idx = Read-OpcaoMenu -Opcoes $opcLeitor
+    if ($idx -eq ($opcLeitor.Count - 1)) {
+        $perifericos.Leitor = Read-Host "Digite o nome/modelo do leitor"
+    } else {
+        $perifericos.Leitor = $opcLeitor[$idx]
+    }
+
+    # ---------- PINPAD ----------
+    $opcPinpad = @("Gertec PPC930", "Lane 3000", "Lane 3600", "Outros")
+    Show-Menu -Titulo "PINPAD" -Opcoes $opcPinpad
+    $idx = Read-OpcaoMenu -Opcoes $opcPinpad
+    if ($idx -eq ($opcPinpad.Count - 1)) {
+        $perifericos.PinPad = Read-Host "Digite o nome/modelo do pinpad"
+    } else {
+        $perifericos.PinPad = $opcPinpad[$idx]
+    }
+
+    # ---------- TECLADO ----------
+    $opcTeclado = @("Normal", "Reduzido")
+    Show-Menu -Titulo "TECLADO" -Opcoes $opcTeclado
+    $idx = Read-OpcaoMenu -Opcoes $opcTeclado
+    if ($idx -eq 1) {
+        do {
+            $qtd = Read-Host "Quantidade de teclas"
+            $num = 0
+            $valido = [int]::TryParse($qtd, [ref]$num) -and $num -gt 0
+        } while (-not $valido)
+        $perifericos.Teclado = "$num teclas"
+    } else {
+        $perifericos.Teclado = "Normal"
+    }
+}
+
+# ============================================================
 #                 HELPERS GERAIS
 # ============================================================
 function Normalize-Str($s) {
@@ -183,7 +325,6 @@ if ($usarSpeccy) {
 
 # ============================================================
 #                LEITURA E PARSE DO ARQUIVO
-#     (extrai APENAS os campos que usamos no relatório)
 # ============================================================
 if ($speccyPath) {
     $text = $null
@@ -205,13 +346,11 @@ if ($speccyPath) {
                 $text -match "(?m)^Operating System"
             )
 
-            # --- NetBIOS Name (para validar a máquina) ---
             if ($text -match "NetBIOS Name\s+(\S+)") {
                 $speccy.MachineName  = $matches[1].Trim()
                 $speccy.MachineMatch = ($speccy.MachineName -ieq $env:COMPUTERNAME)
             }
 
-            # --- CPU: temperatura, codename, package ---
             if ($text -match "Average Temperature\s+(\d+)\s*°C") {
                 $speccy.CpuTemp = "$($matches[1]) °C"
             }
@@ -222,7 +361,6 @@ if ($speccyPath) {
                 $speccy.CpuPackage = $matches[1].Trim()
             }
 
-            # --- RAM: tipo, frequência real, canais, timings ---
             if ($text -match "(?ms)^\t+Memory\s*\r?\n(.*?)(?=^\t+Physical Memory)") {
                 $mem = $matches[1]
 
@@ -244,14 +382,12 @@ if ($speccyPath) {
                 }
             }
 
-            # --- Chipset e BIOS ---
             if ($text -match "Chipset Model\s+(.+)") { $speccy.Chipset = $matches[1].Trim() }
 
             if ($text -match "(?ms)BIOS\s*\r?\n\s*Brand\s+(.+?)\r?\n\s*Version\s+(.+?)\r?\n\s*Date\s+(.+)") {
                 $speccy.Bios = "$($matches[1].Trim()) $($matches[2].Trim())"
             }
 
-            # --- Discos: temperatura e saúde (SOMENTE Hard drives) ---
             if ($text -match "(?ms)^\t+Hard drives\s*\r?\n(.*?)(?=^\t+Flash drives|^\t+Optical Drives|\z)") {
                 $hd = $matches[1]
                 $blocks = [regex]::Matches(
@@ -447,37 +583,55 @@ if ($diskLines.Count -eq 0) {
 }
 
 # ================= REDE =================
-$networks = Get-CimInstance Win32_NetworkAdapter |
+$networks = @(Get-CimInstance Win32_NetworkAdapter |
 Where-Object {
     $_.PhysicalAdapter -eq $true -and
     $_.Name -notmatch "Virtual|VPN|Hyper-V|Bluetooth"
-}
+})
 
-$redeLines = @()
-$i = 1
+$totalRedes = $networks.Count
 
-foreach ($net in $networks) {
+if ($totalRedes -eq 0) {
+    $redeInfo = "(nenhuma interface de rede detectada)"
+} elseif ($totalRedes -eq 1) {
+
+    $net = $networks[0]
 
     $tipoRede = "Cabo"
     if ($net.Name -match "Wireless|Wi-Fi|WiFi|802.11") { $tipoRede = "Wi-Fi" }
 
-    $status = "Desconectado"
-    if ($net.NetEnabled -eq $true) { $status = "Conectado" }
-
     $gigabit = "Não"
     if ($net.Speed -ge 1000000000) { $gigabit = "Sim" }
 
-    $redeLines += @"
-Rede ${i}:
+    $redeInfo = @"
 $($net.Name)
 Tipo: $tipoRede
-Status: $status
 Gigabit: $gigabit
 "@
-    $i++
-}
 
-$redeInfo = $redeLines -join "`n"
+} else {
+
+    $redeLines = @()
+    for ($idx = 0; $idx -lt $totalRedes; $idx++) {
+
+        $net = $networks[$idx]
+
+        $tipoRede = "Cabo"
+        if ($net.Name -match "Wireless|Wi-Fi|WiFi|802.11") { $tipoRede = "Wi-Fi" }
+
+        $gigabit = "Não"
+        if ($net.Speed -ge 1000000000) { $gigabit = "Sim" }
+
+        $redeLines += @"
+Rede $($idx + 1):
+$($net.Name)
+Tipo: $tipoRede
+Gigabit: $gigabit
+"@
+    }
+
+    $redeInfo = $redeLines -join "`n"
+}
 
 # ================= IP =================
 $ipInfo = Get-CimInstance Win32_NetworkAdapterConfiguration |
@@ -556,12 +710,12 @@ $diskLine
 Rede:
 $redeInfo
 
-Fonte:
-Balança:
-Impressora:
-Leitor código de barras:
-PinPad:
-Teclado:
+Fonte: $($perifericos.Fonte)
+Balança: $($perifericos.Balanca)
+Impressora: $($perifericos.Impressora)
+Leitor código de barras: $($perifericos.Leitor)
+PinPad: $($perifericos.PinPad)
+Teclado: $($perifericos.Teclado)
 
 Placa Mãe:
 $mbInfo
