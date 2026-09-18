@@ -3,6 +3,9 @@ param(
     [switch]$SkipSpeccy
 )
 
+# Garante que $isCaixa exista mesmo se o menu for pulado
+$isCaixa = $false
+
 # ================= SISTEMA =================
 $os = (Get-CimInstance Win32_OperatingSystem).Caption
 
@@ -67,7 +70,7 @@ function Read-OpcaoMenu {
     return ($num - 1)
 }
 
-# ---------- TIPO DE MÁQUINA (mesmo estilo visual) ----------
+# ---------- TIPO DE MÁQUINA ----------
 Write-Host ""
 Write-Host "================================================" -ForegroundColor Yellow
 Write-Host " Qual o tipo desta máquina?" -ForegroundColor Yellow
@@ -696,6 +699,21 @@ if ($speccyFoiUsado) {
     $fraseFonte = "(Relatório gerado apenas com dados do WMI)"
 }
 
+# ================= BLOCO DE PERIFÉRICOS (só Caixa) =================
+if ($isCaixa) {
+    $blocoPerifericos = @"
+Fonte: $($perifericos.Fonte)
+Balança: $($perifericos.Balanca)
+Impressora: $($perifericos.Impressora)
+Leitor código de barras: $($perifericos.Leitor)
+PinPad: $($perifericos.PinPad)
+Teclado: $($perifericos.Teclado)
+
+"@
+} else {
+    $blocoPerifericos = ""
+}
+
 # ================= SAÍDA =================
 $output = @"
 Sistema Operacional: $os
@@ -710,14 +728,7 @@ $diskLine
 Rede:
 $redeInfo
 
-Fonte: $($perifericos.Fonte)
-Balança: $($perifericos.Balanca)
-Impressora: $($perifericos.Impressora)
-Leitor código de barras: $($perifericos.Leitor)
-PinPad: $($perifericos.PinPad)
-Teclado: $($perifericos.Teclado)
-
-Placa Mãe:
+${blocoPerifericos}Placa Mãe:
 $mbInfo
 
 NetBIOS Name: $netbios
