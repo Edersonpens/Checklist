@@ -699,47 +699,45 @@ if ($speccyFoiUsado) {
     $fraseFonte = "(Relatório gerado apenas com dados do WMI)"
 }
 
-# ================= BLOCO DE PERIFÉRICOS (só Caixa) =================
-if ($isCaixa) {
-    $blocoPerifericos = @"
-Fonte: $($perifericos.Fonte)
-Balança: $($perifericos.Balanca)
-Impressora: $($perifericos.Impressora)
-Leitor código de barras: $($perifericos.Leitor)
-PinPad: $($perifericos.PinPad)
-Teclado: $($perifericos.Teclado)
+# ================= MONTAGEM DO RELATÓRIO (linha a linha) =================
+$linhas = New-Object System.Collections.Generic.List[string]
 
-"@
-} else {
-    $blocoPerifericos = ""
+$linhas.Add("Sistema Operacional: $os")
+$linhas.Add("")
+$linhas.Add("Processador: $cpuLinha")
+$linhas.Add("")
+$linhas.Add("Memória Total: $ramLinha")
+$linhas.Add("")
+$linhas.Add("Armazenamento:")
+$linhas.Add($diskLine)
+$linhas.Add("")
+$linhas.Add("Rede:")
+$linhas.Add($redeInfo)
+$linhas.Add("")
+
+if ($isCaixa) {
+    $linhas.Add("Fonte: $($perifericos.Fonte)")
+    $linhas.Add("Balança: $($perifericos.Balanca)")
+    $linhas.Add("Impressora: $($perifericos.Impressora)")
+    $linhas.Add("Leitor código de barras: $($perifericos.Leitor)")
+    $linhas.Add("PinPad: $($perifericos.PinPad)")
+    $linhas.Add("Teclado: $($perifericos.Teclado)")
+    $linhas.Add("")
 }
 
-# ================= SAÍDA =================
-$output = @"
-Sistema Operacional: $os
+$linhas.Add("Placa Mãe:")
+$linhas.Add($mbInfo)
+$linhas.Add("")
+$linhas.Add("NetBIOS Name: $netbios")
+$linhas.Add("")
+$linhas.Add("IP:")
+$linhas.Add($ip)
+$linhas.Add("")
+$linhas.Add($dataHora)
+$linhas.Add("")
+$linhas.Add($fraseFonte)
 
-Processador: $cpuLinha
-
-Memória Total: $ramLinha
-
-Armazenamento:
-$diskLine
-
-Rede:
-$redeInfo
-
-${blocoPerifericos}Placa Mãe:
-$mbInfo
-
-NetBIOS Name: $netbios
-
-IP:
-$ip
-
-$dataHora
-
-$fraseFonte
-"@
+$output = $linhas -join "`r`n"
 
 # ================= SALVAR =================
 $desktop = [Environment]::GetFolderPath("Desktop")
