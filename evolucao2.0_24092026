@@ -165,8 +165,8 @@ if ($isCaixa) {
 
     # ---------- TECLADO ----------
     $opcTeclado = @(
-        "Gertec TEC 55",
         "Gertec TEC 44",
+        "Gertec TEC 55",
         "Gertec TEC 65",
         "Gertec TEC 44 DISPLAY",
         "Gertec TEC 55 DISPLAY",
