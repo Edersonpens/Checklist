@@ -478,16 +478,23 @@ $isCaixa = ($tipoMaq -eq "1")
 if ($isCaixa) {
 
     # ---------- FONTE ----------
-    Write-Host ""
-    Write-Host "================================================" -ForegroundColor Cyan
-    Write-Host " FONTE" -ForegroundColor Cyan
-    Write-Host " (digite apenas o número — será completado com W)" -ForegroundColor DarkGray
-    Write-Host "================================================" -ForegroundColor Cyan
-    $fonteVal = Read-Host "Fonte"
-    if ([string]::IsNullOrWhiteSpace($fonteVal)) {
-        $perifericos.Fonte = ""
+    $opcFonte = @("Fonte Externa", "Fonte Mini Atx", "Fonte normal")
+    Show-Menu -Titulo "FONTE" -Opcoes $opcFonte
+    $idx = Read-OpcaoMenu -Opcoes $opcFonte
+
+    if ($idx -eq 2) {
+        # "Fonte normal" — pergunta a potência em W
+        Write-Host ""
+        Write-Host " (digite apenas o número — será completado com W)" -ForegroundColor DarkGray
+        $fonteVal = Read-Host "Fonte"
+        if ([string]::IsNullOrWhiteSpace($fonteVal)) {
+            $perifericos.Fonte = "Fonte normal"
+        } else {
+            $perifericos.Fonte = "Fonte normal " + $fonteVal.Trim() + "W"
+        }
     } else {
-        $perifericos.Fonte = $fonteVal.Trim() + "W"
+        # "Fonte Externa" e "Fonte Mini Atx" — apenas salva o tipo
+        $perifericos.Fonte = $opcFonte[$idx]
     }
 
     # ---------- BALANÇA ----------
