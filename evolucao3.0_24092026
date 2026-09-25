@@ -498,7 +498,7 @@ if ($isCaixa) {
     }
 
     # ---------- BALANÇA ----------
-    $opcBalanca = @("Prix 8217", "Elgin DP30CK", "Outros")
+    $opcBalanca = @("Prix 8217", "Elgin DP30CK", "Checkout sem balança", "Outros")
     Show-Menu -Titulo "BALANÇA" -Opcoes $opcBalanca
     $idx = Read-OpcaoMenu -Opcoes $opcBalanca
     if ($idx -eq ($opcBalanca.Count - 1)) {
